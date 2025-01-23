@@ -69,7 +69,7 @@ Did I streamline this? Absolutely not, do I know what I'm doing? Not really but 
 1. Install dependencies:
 \`\`\`bash
 npm install
-# or
+or
 yarn install
 \`\`\`
 
@@ -81,7 +81,7 @@ CLAUDE_API_KEY=your-api-key-here
 3. Start the development server:
 \`\`\`bash
 npm run dev
-# or
+or
 yarn dev
 \`\`\`
 
