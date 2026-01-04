@@ -72,7 +72,8 @@ export default function PostCreator() {
       if (!data.feedback?.includes('⚠️ Policy Alert:')) {
         setHasAcknowledgedFeedback(true);
       }
-    } catch {
+    } catch (error) {
+      console.error('Failed to analyze post:', error);
       setFeedback('Error analyzing post. Please try again.');
     } finally {
       setIsAnalyzing(false);
