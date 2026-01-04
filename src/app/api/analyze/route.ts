@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import type { AnalyzeRequest, AnalyzeResponse, ApiError } from '@/types';
 
-// Initialize the Anthropic client
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+
+if (!CLAUDE_API_KEY) {
+  console.error('Missing CLAUDE_API_KEY environment variable');
+}
+
 const anthropic = new Anthropic({
-  apiKey: process.env.CLAUDE_API_KEY || '',
+  apiKey: CLAUDE_API_KEY ?? '',
 });
 
 const SYSTEM_PROMPT = `You are Contento, a specialized AI for LinkedIn post compliance and improvement suggestions.
@@ -17,7 +23,7 @@ Review posts and respond in one of two ways:
 [One sentence suggestion for improvement without bullet points or lists]
 [blank line]
 
-2. FOR ALL OTHER POSTS: 
+2. FOR ALL OTHER POSTS:
 Provide 2-3 brief, actionable bullet points to enhance:
 - Clarity
 - Impact
@@ -33,34 +39,48 @@ Important guidelines:
 - For policy violations, provide exactly one sentence suggestion without any bullet points or lists
 - Always include a blank line between policy alert and suggestion`;
 
-export async function POST(request: Request) {
-  try {
-    const { content } = await request.json();
+const MAX_TOKENS = 150;
+const MODEL = 'claude-3-sonnet-20240229';
 
-    if (!content) {
+export async function POST(
+  request: Request
+): Promise<NextResponse<AnalyzeResponse | ApiError>> {
+  try {
+    if (!CLAUDE_API_KEY) {
       return NextResponse.json(
-        { error: 'Content is required' },
+        { error: 'API configuration error' },
+        { status: 500 }
+      );
+    }
+
+    const body = (await request.json()) as AnalyzeRequest;
+
+    if (!body.content || typeof body.content !== 'string') {
+      return NextResponse.json(
+        { error: 'Content is required and must be a string' },
         { status: 400 }
       );
     }
 
     const message = await anthropic.messages.create({
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 150,
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: `Review this LinkedIn post for policy compliance:\n\n${content}`
-      }],
+      messages: [
+        {
+          role: 'user',
+          content: `Review this LinkedIn post for policy compliance:\n\n${body.content}`,
+        },
+      ],
     });
 
-    // Access the content safely
-    const feedback = message.content[0]?.type === 'text' 
-      ? message.content[0].text 
-      : 'Unable to generate feedback';
+    const textContent = message.content[0];
+    const feedback =
+      textContent?.type === 'text'
+        ? textContent.text
+        : 'Unable to generate feedback';
 
     return NextResponse.json({ feedback });
-
   } catch (error) {
     console.error('Error analyzing post:', error);
     return NextResponse.json(
@@ -68,4 +88,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

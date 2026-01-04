@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import type { ExamplesResponse, ApiError } from '@/types';
+
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+
+if (!CLAUDE_API_KEY) {
+  console.error('Missing CLAUDE_API_KEY environment variable');
+}
 
 const anthropic = new Anthropic({
-  apiKey: process.env.CLAUDE_API_KEY || '',
+  apiKey: CLAUDE_API_KEY ?? '',
 });
 
 const SYSTEM_PROMPT = `You are a LinkedIn post example generator. Generate three concise LinkedIn posts (max 200 characters each):
@@ -38,40 +45,57 @@ Return the posts in this exact JSON format:
 
 Important: Each post MUST be under 200 characters. Shorter is better.`;
 
-export async function GET() {
+const MAX_TOKENS = 500;
+const MODEL = 'claude-3-sonnet-20240229';
+
+export async function GET(): Promise<NextResponse<ExamplesResponse | ApiError>> {
   try {
+    if (!CLAUDE_API_KEY) {
+      return NextResponse.json(
+        { error: 'API configuration error' },
+        { status: 500 }
+      );
+    }
+
     const message = await anthropic.messages.create({
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 500,
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: 'Generate three example LinkedIn posts in the specified JSON format.'
-      }],
+      messages: [
+        {
+          role: 'user',
+          content: 'Generate three example LinkedIn posts in the specified JSON format.',
+        },
+      ],
     });
 
-    // Parse the JSON response
-    const content = message.content[0]?.type === 'text' 
-      ? message.content[0].text.trim()
-      : '{}';
-    
-    let examples;
+    const textContent = message.content[0];
+    const content =
+      textContent?.type === 'text' ? textContent.text.trim() : '{}';
+
+    let examples: ExamplesResponse;
     try {
-      examples = JSON.parse(content);
-      
-      // Validate the response has all required fields and they're strings
-      if (!examples.professional || typeof examples.professional !== 'string' ||
-          !examples.policyAlert || typeof examples.policyAlert !== 'string' ||
-          !examples.minorIssues || typeof examples.minorIssues !== 'string') {
+      examples = JSON.parse(content) as ExamplesResponse;
+
+      if (
+        !examples.professional ||
+        typeof examples.professional !== 'string' ||
+        !examples.policyAlert ||
+        typeof examples.policyAlert !== 'string' ||
+        !examples.minorIssues ||
+        typeof examples.minorIssues !== 'string'
+      ) {
         throw new Error('Invalid response format');
       }
     } catch (parseError) {
       console.error('Error parsing response:', content);
-      throw new Error('Failed to parse response');
+      return NextResponse.json(
+        { error: 'Failed to parse response' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(examples);
-
   } catch (error) {
     console.error('Error generating examples:', error);
     return NextResponse.json(
@@ -79,4 +103,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-} 
+}
